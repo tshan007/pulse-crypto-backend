@@ -2,6 +2,9 @@
 
 A Node.js market data gateway between Binance's public WebSocket streams and the PulseCrypto mobile app.
 
+> This is the backend half of PulseCrypto. The mobile app lives in a companion repo,
+> **pulsecrypto-mobile**, and expects this service running on `localhost:8080` by default.
+
 ## Setup
 
 ```bash
