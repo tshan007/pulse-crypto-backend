@@ -147,16 +147,22 @@ that reads `process.env`, and every other module imports from there.
 
 ### Display names
 
-Trading-pair display names (`"Bitcoin / Tether"` etc.) live in `src/constants/displayNames.json`,
-not inline in code, and are accessed only through `src/lookup/displayNameLookup.ts`'s
-`getDisplayName()` function — never imported directly at call sites. This is deliberate:
-the plan is to eventually back this with a MongoDB lookup table, and isolating the data
-source behind a function means that migration touches one file instead of a find-and-replace
-across the codebase. That said, the interface will need to become `async` when that happens
-(a DB call can't be synchronous), which will ripple into the (currently synchronous) loops
-in `rest/pairsMeta.ts` — flagged with a `TODO(mongo-migration)` comment at the point it'll
-need touching, rather than pre-emptively making everything async today for a backend that
-doesn't exist yet.
+Trading-pair display names (`"Bitcoin / Tether"` etc.) live in `src/constants/displayNames.json`
+— currently populated with 100 major Binance USDT pairs, not just the 5 actively tracked by
+default — and are accessed only through `src/lookup/displayNameLookup.ts`'s `getDisplayName()`
+function, never imported directly at call sites. This is deliberate: the plan is to eventually
+back this with a MongoDB lookup table, and isolating the data source behind a function means
+that migration touches one file instead of a find-and-replace across the codebase. That said,
+the interface will need to become `async` when that happens (a DB call can't be synchronous),
+which will ripple into the (currently synchronous) loops in `rest/pairsMeta.ts` — flagged with
+a `TODO(mongo-migration)` comment at the point it'll need touching, rather than pre-emptively
+making everything async today for a backend that doesn't exist yet.
+
+Note the distinction: this table only affects display names. Which pairs the backend actually
+*connects to Binance for and streams live data on* is controlled separately by `PAIRS` in
+`.env` (5 by default). `getDisplayName()` gracefully falls back to the raw symbol for any pair
+not in the table, so the two lists are safe to keep out of sync — e.g. `PAIRS=btcusdt,apeusdt`
+resolves cleanly today even though only `BTCUSDT` was in the table when this project started.
 
 ## Trade-offs not taken further (given scope)
 
