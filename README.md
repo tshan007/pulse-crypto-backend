@@ -85,12 +85,23 @@ periodic low-frequency REST poll and merged into the same `PairState` the depth 
 updates. This means `change24h` updates roughly every 10s rather than every 100ms — an
 acceptable trade-off since 24h change is inherently a slow-moving figure.
 
-**Graceful degradation on Binance REST failure.** If the `/api/v3/ticker/24hr` call fails
-(rate limiting, network issue, geo-blocking), `/pairs/meta` and `change24h` fall back to
-static mock data (`ALLOW_MOCK_META=true` by default) rather than the server failing to
-start or returning errors. This was actually exercised during development: this sandbox
-has no outbound network access to Binance, so the fallback path is the one verified
-end-to-end here.
+**No mock data — honest degradation on Binance REST failure instead.** If the
+`/api/v3/ticker/24hr` call fails (rate limiting, network issue, geo-blocking), the backend
+never fabricates numbers. Behavior:
+- If a previous successful fetch exists, that cached real data keeps being served
+  (stale-but-real beats fake-but-fresh), and `change24h` in the market store is simply left
+  untouched rather than overwritten with an invented figure.
+- If there has never been a successful fetch, `GET /pairs/meta` returns each pair with
+  `high24h`/`low24h`/`volume24h` as `null` and `tradingStatus: "UNKNOWN"` — an honest "we
+  don't know yet" rather than plausible-looking fake data that could be mistaken for real.
+- Every failure is logged server-side, and the most recent error message is exposed via the
+  `X-Meta-Fetch-Error` response header on `/pairs/meta`, so callers that care can detect
+  degraded data without it changing the response body's shape.
+
+This was actually exercised during development: this sandbox has no outbound network access
+to Binance, so the "never fetched successfully" path is the one verified end-to-end here —
+confirmed the response returns clean nulls/`UNKNOWN` and the header carries the real
+`403` Binance returned, not a swallowed or fabricated error.
 
 ### Payload shape
 
@@ -120,10 +131,32 @@ share of visible top-10-level volume on each side, summing to 100.
 ## Assumptions
 
 - 5 fixed pairs is sufficient (config-driven via `PAIRS` env var if more are wanted).
-- Top-10 order book levels (configurable via `depthLevels` in `config.ts`) are enough for
-  the mobile detail view; the underlying Binance stream carries 20.
+- Top-10 order book levels (configurable via `DEPTH_LEVELS`) are enough for the mobile
+  detail view; the underlying Binance stream carries 20.
 - A market *viewer* doesn't need execution-grade order book accuracy, justifying the
   partial-depth-stream trade-off above.
+
+### Configuration
+
+Every previously-hardcoded value that's actually deployment-specific now lives in `.env`
+(see `.env.example` for the full list with defaults) — WS path, broadcast interval,
+backpressure threshold, tracked pairs, depth levels, Binance WS/REST base URLs, the depth
+stream suffix, reconnect backoff schedule, meta poll interval, and fetch timeout. Nothing
+in `src/` hardcodes a URL, port, or timing value anymore; `config.ts` is the single place
+that reads `process.env`, and every other module imports from there.
+
+### Display names
+
+Trading-pair display names (`"Bitcoin / Tether"` etc.) live in `src/constants/displayNames.json`,
+not inline in code, and are accessed only through `src/lookup/displayNameLookup.ts`'s
+`getDisplayName()` function — never imported directly at call sites. This is deliberate:
+the plan is to eventually back this with a MongoDB lookup table, and isolating the data
+source behind a function means that migration touches one file instead of a find-and-replace
+across the codebase. That said, the interface will need to become `async` when that happens
+(a DB call can't be synchronous), which will ripple into the (currently synchronous) loops
+in `rest/pairsMeta.ts` — flagged with a `TODO(mongo-migration)` comment at the point it'll
+need touching, rather than pre-emptively making everything async today for a backend that
+doesn't exist yet.
 
 ## Trade-offs not taken further (given scope)
 
@@ -138,4 +171,6 @@ share of visible top-10-level volume on each side, summing to 100.
 Built collaboratively with Claude (Anthropic), used for architectural discussion, code
 generation, and in-sandbox verification (dependency install, typecheck, and a live
 end-to-end WebSocket smoke test confirming snapshot delivery at the configured interval
-and the mock-metadata fallback path when Binance is unreachable).
+and the honest empty-value fallback path when Binance is unreachable — plus the discovery
+and fix of a real bug where `.env` was never actually being loaded, since Node doesn't read
+`.env` files without an explicit loader).

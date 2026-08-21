@@ -1,9 +1,10 @@
+import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import { config } from "./config";
 import { BinanceIngestionClient } from "./binance/client";
 import { Broadcaster } from "./broadcast/broadcaster";
-import { getPairsMeta, refreshPairsMeta } from "./rest/pairsMeta";
+import { getPairsMeta, getMetaFetchError, refreshPairsMeta } from "./rest/pairsMeta";
 
 const app = express();
 const httpServer = createServer(app);
@@ -13,6 +14,14 @@ app.get("/health", (_req, res) => {
 });
 
 app.get("/pairs/meta", (_req, res) => {
+  // Response body stays a plain PairMeta[] for backward compatibility with
+  // the mobile client. The most recent Binance fetch error (if any) is
+  // surfaced as a header rather than changing the body shape — callers
+  // that care can check it; those that don't are unaffected. Individual
+  // pairs already carry their own honesty signal via null fields and
+  // tradingStatus "UNKNOWN" (see rest/pairsMeta.ts).
+  const fetchError = getMetaFetchError();
+  if (fetchError) res.set("X-Meta-Fetch-Error", fetchError);
   res.json(getPairsMeta());
 });
 
@@ -30,7 +39,7 @@ async function main() {
 
   httpServer.listen(config.port, () => {
     console.log(`[server] listening on http://localhost:${config.port}`);
-    console.log(`[server] WS endpoint: ws://localhost:${config.port}/ws`);
+    console.log(`[server] WS endpoint: ws://localhost:${config.port}${config.wsPath}`);
     console.log(`[server] tracking: ${config.pairsUpper.join(", ")}`);
     console.log(`[server] broadcast interval: ${config.broadcastIntervalMs}ms`);
   });

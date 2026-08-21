@@ -18,15 +18,17 @@ export interface PairState {
   connected: boolean; // whether the upstream Binance stream for this pair is live
 }
 
-// Metadata for a pair, served by GET /pairs/meta. May be sourced from
-// Binance's 24hr ticker REST endpoint, or mocked if unavailable.
+// Metadata for a pair, served by GET /pairs/meta. Sourced from Binance's
+// 24hr ticker REST endpoint. Never fabricated — see rest/pairsMeta.ts for
+// what happens when that source is unavailable.
 export interface PairMeta {
   pair: string;
   displayName: string;
-  tradingStatus: "TRADING" | "BREAK" | "UNKNOWN";
-  high24h: number | null;
+  tradingStatus: "TRADING" | "BREAK" | "UNKNOWN"; // UNKNOWN = no real data available yet
+  high24h: number | null; // null when not available (never a fabricated value)
   low24h: number | null;
   volume24h: number | null;
+  updatedAt: number | null; // ms epoch of the last successful Binance fetch, or null if never
 }
 
 // Outbound WebSocket message envelope. Kept as a small discriminated union

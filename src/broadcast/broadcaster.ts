@@ -26,7 +26,7 @@ export class Broadcaster {
   private intervalHandle: NodeJS.Timeout | null = null;
 
   constructor(httpServer: HttpServer) {
-    this.wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+    this.wss = new WebSocketServer({ server: httpServer, path: config.wsPath });
 
     this.wss.on("connection", (ws) => {
       console.log(`[ws] client connected (${this.wss.clients.size} total)`);

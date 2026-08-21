@@ -3,15 +3,15 @@ import { config } from "../config";
 import { marketStore } from "../state/marketStore";
 import { BookLevel } from "../types";
 
-// We use Binance's partial book depth stream (top 20 levels, pushed every
-// 100ms by Binance itself) rather than the raw diff-depth stream. Binance
-// already maintains the order book and hands us a ready-to-use snapshot per
-// message. The alternative — subscribing to @depth diffs and maintaining our
-// own book via a REST snapshot + sequenced diff application — is real
-// engineering surface (out-of-order handling, resync-on-gap, snapshot
-// staleness) that doesn't add meaningful signal for this exercise, so it's a
-// deliberately scoped trade-off. See README for more.
-const STREAM_SUFFIX = "depth20@100ms";
+// We use Binance's partial book depth stream (top N levels, pushed on a
+// fixed cadence by Binance itself — see config.binanceDepthStreamSuffix)
+// rather than the raw diff-depth stream. Binance already maintains the
+// order book and hands us a ready-to-use snapshot per message. The
+// alternative — subscribing to @depth diffs and maintaining our own book
+// via a REST snapshot + sequenced diff application — is real engineering
+// surface (out-of-order handling, resync-on-gap, snapshot staleness) that
+// doesn't add meaningful signal for this exercise, so it's a deliberately
+// scoped trade-off. See README for more.
 
 interface CombinedStreamMessage {
   stream: string;
@@ -23,8 +23,8 @@ interface CombinedStreamMessage {
 }
 
 function buildStreamUrl(symbolsLower: string[]): string {
-  const streams = symbolsLower.map((s) => `${s}@${STREAM_SUFFIX}`).join("/");
-  return `wss://stream.binance.com:9443/stream?streams=${streams}`;
+  const streams = symbolsLower.map((s) => `${s}@${config.binanceDepthStreamSuffix}`).join("/");
+  return `${config.binanceWsBaseUrl}?streams=${streams}`;
 }
 
 /**
@@ -84,7 +84,8 @@ export class BinanceIngestionClient {
 
   private scheduleReconnect() {
     this.reconnectAttempt += 1;
-    const delayMs = Math.min(30_000, 1000 * 2 ** Math.min(this.reconnectAttempt, 5));
+    const { binanceReconnectBaseDelayMs: base, binanceReconnectMaxDelayMs: max } = config;
+    const delayMs = Math.min(max, base * 2 ** Math.min(this.reconnectAttempt, 5));
     console.log(`[binance] reconnecting in ${delayMs}ms (attempt ${this.reconnectAttempt})`);
     setTimeout(() => {
       if (!this.closedByUs) this.connect();
