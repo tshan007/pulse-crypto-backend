@@ -1,0 +1,26 @@
+{
+  "name": "@pulsecrypto/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./config": "./dist/config.js",
+    "./types": "./dist/types.js",
+    "./logger": "./dist/logger.js",
+    "./loadEnv": "./dist/loadEnv.js",
+    "./binance/client": "./dist/binance/client.js",
+    "./state/marketStore": "./dist/state/marketStore.js",
+    "./state/redisPublisher": "./dist/state/redisPublisher.js",
+    "./state/remoteMarketStore": "./dist/state/remoteMarketStore.js",
+    "./rest/pairsMeta": "./dist/rest/pairsMeta.js",
+    "./rest/remotePairsMeta": "./dist/rest/remotePairsMeta.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "ioredis": "^6.0.0",
+    "ws": "^8.18.0"
+  }
+}

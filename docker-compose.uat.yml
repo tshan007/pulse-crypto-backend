@@ -1,0 +1,15 @@
+# UAT: points at the real shared UAT Redis (REDIS_URL inside .env.uat), so unlike
+# docker-compose.yml there's no bundled `redis` service here — nothing local to point
+# it at. Run with: docker compose -p pulsecrypto-uat -f docker-compose.uat.yml up --build
+services:
+  ingestion:
+    build: .
+    command: node packages/ingestion/dist/index.js
+    env_file: .env.uat
+
+  broadcast:
+    build: .
+    command: node packages/broadcast/dist/index.js
+    env_file: .env.uat
+    ports:
+      - "8080:8080"

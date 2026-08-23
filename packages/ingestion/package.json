@@ -1,0 +1,11 @@
+{
+  "name": "@pulsecrypto/ingestion",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "dependencies": {
+    "@pulsecrypto/shared": "*",
+    "ioredis": "^6.0.0"
+  }
+}

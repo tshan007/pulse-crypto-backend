@@ -1,7 +1,8 @@
 import WebSocket from "ws";
 import { config } from "../config";
+import { debugLog } from "../logger";
 import { marketStore } from "../state/marketStore";
-import { BookLevel } from "../types";
+import { BookLevel, PairState } from "../types";
 
 // We use Binance's partial book depth stream (top N levels, pushed on a
 // fixed cadence by Binance itself — see config.binanceDepthStreamSuffix)
@@ -38,6 +39,17 @@ export class BinanceIngestionClient {
   private reconnectAttempt = 0;
   private closedByUs = false;
 
+  // Fires after every marketStore mutation this client makes, with that pair's fresh
+  // state. Lets a caller (e.g. the ingestion process, republishing to Redis) react to
+  // changes without this class knowing anything about where they're republished to.
+  constructor(private onUpdate?: (pair: string, state: PairState) => void) {}
+
+  private notify(pair: string) {
+    if (!this.onUpdate) return;
+    const state = marketStore.getPair(pair);
+    if (state) this.onUpdate(pair, state);
+  }
+
   start() {
     this.closedByUs = false;
     this.connect();
@@ -50,13 +62,17 @@ export class BinanceIngestionClient {
 
   private connect() {
     const url = buildStreamUrl(config.pairsLower);
+    debugLog("binance", "connecting", url);
     const ws = new WebSocket(url);
     this.ws = ws;
 
     ws.on("open", () => {
       this.reconnectAttempt = 0;
       console.log(`[binance] connected (${config.pairsUpper.join(", ")})`);
-      for (const pair of config.pairsUpper) marketStore.setConnected(pair, true);
+      for (const pair of config.pairsUpper) {
+        marketStore.setConnected(pair, true);
+        this.notify(pair);
+      }
     });
 
     ws.on("message", (raw: WebSocket.RawData) => {
@@ -65,19 +81,27 @@ export class BinanceIngestionClient {
         const symbolLower = msg.stream.split("@")[0];
         const pair = symbolLower.toUpperCase();
         marketStore.applyDepthUpdate(pair, msg.data.bids, msg.data.asks);
+        debugLog("binance", pair, "bids:", msg.data.bids.length, "asks:", msg.data.asks.length);
+        this.notify(pair);
       } catch (err) {
         console.error("[binance] failed to parse message", err);
+        debugLog("binance", "raw message that failed to parse:", raw.toString().slice(0, 500));
       }
     });
 
-    ws.on("close", () => {
-      for (const pair of config.pairsUpper) marketStore.setConnected(pair, false);
+    ws.on("close", (code, reason) => {
+      debugLog("binance", "closed", code, reason.toString());
+      for (const pair of config.pairsUpper) {
+        marketStore.setConnected(pair, false);
+        this.notify(pair);
+      }
       if (this.closedByUs) return;
       this.scheduleReconnect();
     });
 
     ws.on("error", (err) => {
       console.error("[binance] socket error", err.message);
+      debugLog("binance", "socket error detail", err);
       // "close" fires after "error" for ws sockets, which triggers reconnect.
     });
   }

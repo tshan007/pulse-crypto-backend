@@ -1,0 +1,30 @@
+# Default/local Docker target: bundles a local `redis` container and points both
+# services at it, using plain .env. For other environments, see
+# docker-compose.{uat,development,production}.yml — each is self-contained (its own
+# env_file, no bundled redis, since those point at a real external Redis host) rather
+# than layered on top of this file, to avoid Compose's environment-merge footguns.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  ingestion:
+    build: .
+    command: node packages/ingestion/dist/index.js
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
+  broadcast:
+    build: .
+    command: node packages/broadcast/dist/index.js
+    env_file: .env
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8080:8080"
+    depends_on:
+      - redis

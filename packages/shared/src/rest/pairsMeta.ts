@@ -1,6 +1,5 @@
 import { config } from "../config";
 import { marketStore } from "../state/marketStore";
-import { getDisplayName } from "../lookup/displayNameLookup";
 import { PairMeta } from "../types";
 
 let latestMeta = new Map<string, PairMeta>();
@@ -40,7 +39,6 @@ export async function refreshPairsMeta(): Promise<void> {
       const pair = d.symbol as string;
       latestMeta.set(pair, {
         pair,
-        displayName: getDisplayName(pair),
         tradingStatus: "TRADING",
         high24h: Number(d.highPrice),
         low24h: Number(d.lowPrice),
@@ -68,7 +66,6 @@ export function getPairsMeta(): PairMeta[] {
   // Never fetched successfully yet: honest empty values, not invented ones.
   return config.pairsUpper.map((pair) => ({
     pair,
-    displayName: getDisplayName(pair),
     tradingStatus: "UNKNOWN",
     high24h: null,
     low24h: null,

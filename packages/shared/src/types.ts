@@ -18,12 +18,21 @@ export interface PairState {
   connected: boolean; // whether the upstream Binance stream for this pair is live
 }
 
+// Read-only view onto live market state. `MarketStore` (in-process) and the
+// Redis-backed `RemoteMarketStore` (broadcast process, once ingestion runs
+// separately) both satisfy this — it's what `Broadcaster` depends on instead
+// of a concrete store, so the backing implementation can change without
+// touching broadcast code.
+export interface MarketReader {
+  getAll(): PairState[];
+  getPair(pair: string): PairState | undefined;
+}
+
 // Metadata for a pair, served by GET /pairs/meta. Sourced from Binance's
 // 24hr ticker REST endpoint. Never fabricated — see rest/pairsMeta.ts for
 // what happens when that source is unavailable.
 export interface PairMeta {
   pair: string;
-  displayName: string;
   tradingStatus: "TRADING" | "BREAK" | "UNKNOWN"; // UNKNOWN = no real data available yet
   high24h: number | null; // null when not available (never a fabricated value)
   low24h: number | null;
@@ -36,3 +45,15 @@ export interface PairMeta {
 export type ServerMessage =
   | { type: "snapshot"; data: PairState[] }
   | { type: "connection"; pair: string; connected: boolean };
+
+export type WireFormat = "json" | "msgpack";
+
+// Inbound WebSocket control message. A client can send this at any point
+// after connecting to change its own broadcast cadence and/or encoding
+// without reconnecting. Always sent as JSON regardless of the negotiated
+// data format — this channel is low-frequency and stays simple to debug.
+export type ClientMessage = {
+  type: "configure";
+  intervalMs?: number; // omit to leave interval unchanged
+  format?: WireFormat; // omit to leave format unchanged
+};
