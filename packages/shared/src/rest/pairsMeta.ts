@@ -48,6 +48,9 @@ export async function refreshPairsMeta(): Promise<void> {
       marketStore.applyChange24h(pair, Number(d.priceChangePercent));
     }
 
+    if (lastFetchError) {
+      console.log(`[meta] Binance 24hr fetch recovered (was failing: ${lastFetchError}).`);
+    }
     lastFetchError = null;
   } catch (err) {
     lastFetchError = (err as Error).message;

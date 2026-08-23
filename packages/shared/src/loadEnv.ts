@@ -8,15 +8,14 @@ import path from "path";
 // works the same on PowerShell, cmd, and bash — not something you're expected to type
 // by hand.
 //
-// APP_ENV unset, or set to a name with no matching .env.{name} file on disk: falls
-// back to plain .env, same as before this existed. So this is a no-op for anyone not
-// deliberately using multiple environments.
+// APP_ENV unset defaults to "development". If the resolved .env.{name} file isn't on
+// disk, falls back to plain .env.
 //
 // Resolved against process.cwd(), which every package.json script keeps at the repo
 // root (never `npm run ... -w packages/x`) specifically so this always finds the .env
 // files there regardless of which package's entrypoint is actually running.
-const appEnv = process.env.APP_ENV;
-const candidate = appEnv ? `.env.${appEnv}` : ".env";
+const appEnv = process.env.APP_ENV ?? "development";
+const candidate = `.env.${appEnv}`;
 const resolved = path.resolve(process.cwd(), candidate);
 
 if (fs.existsSync(resolved)) {
@@ -24,5 +23,5 @@ if (fs.existsSync(resolved)) {
   console.log(`[env] loaded ${candidate}`);
 } else {
   dotenv.config();
-  if (appEnv) console.warn(`[env] ${candidate} not found, fell back to .env`);
+  console.warn(`[env] ${candidate} not found, fell back to .env`);
 }

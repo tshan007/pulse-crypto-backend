@@ -37,6 +37,7 @@
     "docker:up": "docker compose up --build",
     "docker:up:uat": "docker compose -p pulsecrypto-uat -f docker-compose.uat.yml up --build",
     "docker:up:development": "docker compose -p pulsecrypto-development -f docker-compose.development.yml up --build",
+    "docker:up:development:debug": "docker compose -p pulsecrypto-development -f docker-compose.development.yml -f docker-compose.development.debug.yml up --build",
     "docker:up:production": "docker compose -p pulsecrypto-production -f docker-compose.production.yml up --build",
     "docker:down": "docker compose down",
     "docker:down:uat": "docker compose -p pulsecrypto-uat -f docker-compose.uat.yml down",

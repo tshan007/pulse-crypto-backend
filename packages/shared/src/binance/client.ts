@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import { config } from "../config";
-import { debugLog } from "../logger";
+import { debugLog, debugTick } from "../logger";
 import { marketStore } from "../state/marketStore";
 import { BookLevel, PairState } from "../types";
 
@@ -81,7 +81,7 @@ export class BinanceIngestionClient {
         const symbolLower = msg.stream.split("@")[0];
         const pair = symbolLower.toUpperCase();
         marketStore.applyDepthUpdate(pair, msg.data.bids, msg.data.asks);
-        debugLog("binance", pair, "bids:", msg.data.bids.length, "asks:", msg.data.asks.length);
+        debugTick("binance", "depth message", pair);
         this.notify(pair);
       } catch (err) {
         console.error("[binance] failed to parse message", err);

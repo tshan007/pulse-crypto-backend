@@ -1,5 +1,5 @@
 import Redis from "ioredis";
-import { debugLog } from "../logger";
+import { debugLog, debugTick } from "../logger";
 import { MarketReader, PairState } from "../types";
 
 function emptyState(pair: string): PairState {
@@ -64,7 +64,7 @@ export class RemoteMarketStore implements MarketReader {
       try {
         const { pair, state } = JSON.parse(raw) as { pair: string; state: PairState };
         this.pairs.set(pair, state);
-        debugLog("redis", "received update", pair, "price:", state.price);
+        debugTick("redis", "received update", pair);
       } catch (err) {
         console.error("[redis] failed to parse market update", err);
         debugLog("redis", "raw message that failed to parse:", raw.slice(0, 500));

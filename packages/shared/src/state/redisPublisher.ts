@@ -1,5 +1,5 @@
 import Redis from "ioredis";
-import { debugLog } from "../logger";
+import { debugLog, debugTick } from "../logger";
 import { PairMeta, PairState } from "../types";
 
 /**
@@ -19,7 +19,7 @@ export class RedisPublisher {
     const payload = JSON.stringify(state);
     await this.redis.set(`market:${pair}`, payload);
     await this.redis.publish("market:updates", JSON.stringify({ pair, state }));
-    debugLog("redis", "published", pair, "price:", state.price, "connected:", state.connected);
+    debugTick("redis", "published", pair);
   }
 
   async publishMetaSnapshot(metas: PairMeta[], fetchError: string | null): Promise<void> {
