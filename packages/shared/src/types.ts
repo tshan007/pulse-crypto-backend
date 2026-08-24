@@ -39,9 +39,12 @@ export type ServerMessage =
 
 export type WireFormat = "json" | "msgpack";
 
-// Inbound control message — lets a client change cadence/encoding without reconnecting.
+// Inbound control message — lets a client change cadence/encoding/pair-scope without reconnecting.
 export type ClientMessage = {
   type: "configure";
   intervalMs?: number; // omit to leave interval unchanged
   format?: WireFormat; // omit to leave format unchanged
+  // "all" = every tracked pair (default); an array (possibly empty) = only those pairs.
+  // Omit to leave the current pair scope unchanged.
+  pairs?: "all" | string[];
 };

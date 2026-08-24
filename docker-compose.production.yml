@@ -1,9 +1,7 @@
-# Production: points at the real production Redis (REDIS_URL inside .env.production).
-# Same shape as docker-compose.uat.yml — see its comment for why there's no bundled
-# `redis` service here. This is for locally smoke-testing the production image/config
-# with real Docker networking — actual production deployment would run these same
-# images under whatever orchestrator you use (k8s, ECS, ...), not docker-compose on a
-# laptop. Run with:
+# Production: points at real production Redis (.env.production); no bundled redis, same
+# reasoning as docker-compose.uat.yml. For local smoke-testing the production image only
+# — real deployment runs these images under your orchestrator (k8s, ECS, ...), not this.
+# Run with:
 #   docker compose -p pulsecrypto-production -f docker-compose.production.yml up --build
 services:
   ingestion:

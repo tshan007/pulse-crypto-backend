@@ -20,6 +20,11 @@ interface ClientState {
   format: WireFormat;
   effectiveIntervalMs: number;
   lastSentAt: number;
+  // null = every tracked pair (default, and the common case — shares the one
+  // pre-serialized payload built per tick). A Set means this client only
+  // wants those pairs (e.g. a detail screen showing one pair, or an empty
+  // set for a screen that doesn't render pair data at all).
+  pairFilter: Set<string> | null;
 }
 
 /**
@@ -41,6 +46,7 @@ export class Broadcaster {
         format: "json",
         effectiveIntervalMs: config.broadcastIntervalMs,
         lastSentAt: 0,
+        pairFilter: null,
       });
 
       // Immediate snapshot on connect (always JSON) so the client doesn't wait for the first tick.
@@ -108,10 +114,24 @@ export class Broadcaster {
       }
     }
 
-    debugLog("ws", "client configured", { format: state.format, effectiveIntervalMs: state.effectiveIntervalMs });
+    if (msg.pairs !== undefined) {
+      if (msg.pairs === "all") {
+        state.pairFilter = null;
+      } else if (Array.isArray(msg.pairs) && msg.pairs.every((p) => typeof p === "string")) {
+        state.pairFilter = new Set(msg.pairs);
+      } else {
+        console.warn("[ws] ignoring invalid pairs filter");
+      }
+    }
+
+    debugLog("ws", "client configured", {
+      format: state.format,
+      effectiveIntervalMs: state.effectiveIntervalMs,
+      pairFilter: state.pairFilter ? [...state.pairFilter] : "all",
+    });
   }
 
-  private buildSnapshotMessage(): ServerMessage {
+  private buildSnapshotMessage(): Extract<ServerMessage, { type: "snapshot" }> {
     return { type: "snapshot", data: this.store.getAll() };
   }
 
@@ -139,8 +159,18 @@ export class Broadcaster {
         if (!state) continue;
         if (now - state.lastSentAt < state.effectiveIntervalMs) continue; // not due yet
 
-        const payload =
-          state.format === "msgpack" ? (msgpackPayload ??= encode(message)) : jsonPayload;
+        let payload: string | Uint8Array;
+        if (state.pairFilter === null) {
+          // Common case: every client wants all pairs, so this payload is
+          // built once per tick and shared, not re-serialized per client.
+          payload = state.format === "msgpack" ? (msgpackPayload ??= encode(message)) : jsonPayload;
+        } else {
+          const filtered: ServerMessage = {
+            type: "snapshot",
+            data: message.data.filter((p) => state.pairFilter!.has(p.pair)),
+          };
+          payload = state.format === "msgpack" ? encode(filtered) : JSON.stringify(filtered);
+        }
 
         if (this.trySend(client, payload)) state.lastSentAt = now;
       }

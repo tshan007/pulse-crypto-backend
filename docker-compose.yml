@@ -1,9 +1,6 @@
-# Default/local Docker target: bundles a local `redis` container and points both
-# services at it, using .env.development (same no-suffix-defaults-to-development
-# convention as the npm scripts — see loadEnv.ts). For other environments, see
-# docker-compose.{uat,development,production}.yml — each is self-contained (its own
-# env_file, no bundled redis, since those point at a real external Redis host) rather
-# than layered on top of this file, to avoid Compose's environment-merge footguns.
+# Default/local target: bundles redis, uses .env.development (matches the npm scripts'
+# no-suffix-defaults-to-development convention — see loadEnv.ts). Other environments are
+# self-contained files, not layered on this one — avoids Compose's environment-merge footguns.
 services:
   redis:
     image: redis:7-alpine

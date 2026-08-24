@@ -35,13 +35,13 @@
     "typecheck:ingestion": "tsc -p packages/ingestion/tsconfig.json",
     "typecheck:broadcast": "tsc -p packages/broadcast/tsconfig.json",
     "docker:up": "docker compose up --build",
+    "docker:up:debug": "docker compose -f docker-compose.yml -f docker-compose.debug.yml up --build",
+    "docker:up:scale": "docker compose -p pulsecrypto-scale -f docker-compose.scale.yml up --build --scale broadcast=2",
     "docker:up:uat": "docker compose -p pulsecrypto-uat -f docker-compose.uat.yml up --build",
-    "docker:up:development": "docker compose -p pulsecrypto-development -f docker-compose.development.yml up --build",
-    "docker:up:development:debug": "docker compose -p pulsecrypto-development -f docker-compose.development.yml -f docker-compose.development.debug.yml up --build",
     "docker:up:production": "docker compose -p pulsecrypto-production -f docker-compose.production.yml up --build",
     "docker:down": "docker compose down",
+    "docker:down:scale": "docker compose -p pulsecrypto-scale -f docker-compose.scale.yml down",
     "docker:down:uat": "docker compose -p pulsecrypto-uat -f docker-compose.uat.yml down",
-    "docker:down:development": "docker compose -p pulsecrypto-development -f docker-compose.development.yml down",
     "docker:down:production": "docker compose -p pulsecrypto-production -f docker-compose.production.yml down"
   },
   "devDependencies": {

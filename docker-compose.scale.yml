@@ -1,0 +1,33 @@
+# Standalone target for testing horizontal --scale locally (unpublished broadcast port
+# so replicas don't collide) — see README's "Testing horizontal scale locally" for why.
+# Own project name and unexposed redis so it can run alongside the default `docker:up`
+# stack without colliding on ports.
+# Run with:
+#   docker compose -p pulsecrypto-scale -f docker-compose.scale.yml up --build --scale broadcast=N
+# Find each replica's assigned port: docker compose -p pulsecrypto-scale ps
+services:
+  redis:
+    image: redis:7-alpine
+
+  # Singleton by design (one upstream Binance connection — see README's "One upstream
+  # connection" decision). Don't --scale this: multiple replicas would each open their
+  # own Binance connection with no leader election to coordinate them.
+  ingestion:
+    build: .
+    command: node packages/ingestion/dist/index.js
+    env_file: .env.development
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - redis
+
+  broadcast:
+    build: .
+    command: node packages/broadcast/dist/index.js
+    env_file: .env.development
+    environment:
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8080"
+    depends_on:
+      - redis

@@ -1,0 +1,13 @@
+# Debug overlay for docker-compose.yml — adds DEBUG=true via Compose's -f layering.
+# Safe here (unlike the {uat,production} files) because it only adds one environment:
+# key, never a different REDIS_URL/host.
+# Run with:
+#   docker compose -f docker-compose.yml -f docker-compose.debug.yml up --build
+services:
+  ingestion:
+    environment:
+      DEBUG: "true"
+
+  broadcast:
+    environment:
+      DEBUG: "true"

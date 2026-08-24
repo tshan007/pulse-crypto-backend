@@ -79,7 +79,7 @@ loads `.env.{APP_ENV}`.
 ### Docker per environment
 
 ```bash
-npm run docker:up:development  # docker-compose.development.yml, .env.development          
+npm run docker:up              # default: docker-compose.yml, bundled redis, .env.development
 ```
 
 ```bash
@@ -91,18 +91,27 @@ npm run docker:up:production   # docker-compose.production.yml, .env.production
 ### Debug mode: `:debug` script
 
 ```bash
-npm run docker:up:development:debug  # same, + DEBUG=true (docker-compose.development.debug.yml overlay)
+npm run docker:up:debug  # same as docker:up, + DEBUG=true (docker-compose.debug.yml overlay)
 ```
 
-`docker-compose.yml` (default) and `docker-compose.development.yml` both bundle their own
-local `redis` container, work out of the box with no real infra, and read `.env.development`
-— they differ only in Redis exposure: `development`'s isn't exposed on the host (`redis`
-service, no `ports:`), specifically so it can't collide with the default's
-`0.0.0.0:6379->6379` if both happen to run at once. `.env.uat`/
-`.env.production` are different in kind, not just config: they intentionally point at a
-real external `REDIS_URL` that doesn't exist yet, so `docker-compose.{uat,production}.yml`
-have no bundled `redis` at all — those two only prove the plumbing works until someone
-fills in a real host.
+`docker-compose.yml` bundles its own local `redis`, works out of the box with no real
+infra, and reads `.env.development`. `.env.uat`/`.env.production` are different in kind,
+not just config: they intentionally point at a real external `REDIS_URL` that doesn't
+exist yet, so `docker-compose.{uat,production}.yml` have no bundled `redis` at all —
+those two only prove the plumbing works until someone fills in a real host. (There used
+to be a separate `docker-compose.development.yml` too, but once the default file also
+started reading `.env.development`, the two were near-duplicates — merged into one.)
+
+### Testing horizontal scale locally: `docker-compose.scale.yml`
+
+```bash
+npm run docker:up:scale   # broadcast x2, own project (pulsecrypto-scale), unpublished/dynamic host ports
+```
+
+`broadcast` gets a random host port per replica instead of a fixed 8080 — find each
+one with `docker compose -p pulsecrypto-scale ps`. `ingestion` stays at one replica.
+
+##
 
 The broadcast process starts on `http://localhost:8080` by default.
 
