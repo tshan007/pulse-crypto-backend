@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 import { debugLog, debugTick } from "../logger";
+import { MARKET_UPDATES_CHANNEL, marketKey } from "../constants/redisKeys";
 import { MarketReader, PairState } from "../types";
 
 function emptyState(pair: string): PairState {
@@ -18,16 +19,9 @@ function emptyState(pair: string): PairState {
 }
 
 /**
- * Broadcast-side counterpart to `RedisPublisher` (ingestion side). Holds the same
- * shape as `MarketStore` — a local `Map<pair, PairState>` — but populates it from
- * Redis instead of from a direct Binance connection:
- *   - on startup, hydrates every tracked pair from its `market:{pair}` mirror-seed key
- *     (falling back to the same empty-state shape `MarketStore` starts with if the
- *     key hasn't been written yet), then
- *   - subscribes to `market:updates` and overwrites the relevant entry as messages
- *     arrive.
- * `Broadcaster` depends only on the `MarketReader` interface, so it needs no changes
- * to consume this instead of the in-process `MarketStore`.
+ * Broadcast-side counterpart to `RedisPublisher`: hydrates from Redis mirror-seed
+ * keys on startup, then stays live via `market:updates` subscribe. Same `MarketReader`
+ * shape as `MarketStore`, so `Broadcaster` doesn't care which one it's using.
  */
 export class RemoteMarketStore implements MarketReader {
   private pairs = new Map<string, PairState>();
@@ -46,7 +40,7 @@ export class RemoteMarketStore implements MarketReader {
 
   private async hydrate(symbolsUpper: string[]) {
     if (symbolsUpper.length === 0) return;
-    const keys = symbolsUpper.map((pair) => `market:${pair}`);
+    const keys = symbolsUpper.map(marketKey);
     const values = await this.redis.mget(...keys);
     let hydrated = 0;
     symbolsUpper.forEach((pair, i) => {
@@ -58,8 +52,8 @@ export class RemoteMarketStore implements MarketReader {
   }
 
   private async subscribe() {
-    await this.subscriber.subscribe("market:updates");
-    debugLog("redis", "subscribed to market:updates");
+    await this.subscriber.subscribe(MARKET_UPDATES_CHANNEL);
+    debugLog("redis", "subscribed to", MARKET_UPDATES_CHANNEL);
     this.subscriber.on("message", (_channel, raw) => {
       try {
         const { pair, state } = JSON.parse(raw) as { pair: string; state: PairState };

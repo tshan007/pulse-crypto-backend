@@ -6,10 +6,8 @@ import { BinanceIngestionClient } from "@pulsecrypto/shared/binance/client";
 import { getPairsMeta, getMetaFetchError, refreshPairsMeta } from "@pulsecrypto/shared/rest/pairsMeta";
 import { RedisPublisher } from "@pulsecrypto/shared/state/redisPublisher";
 
-// Ingestion process: owns the single Binance WebSocket connection and the 24hr-meta
-// REST poller. Publishes everything to Redis (see state/redisPublisher.ts) and serves
-// no HTTP/WS traffic of its own — that's the broadcast process (packages/broadcast),
-// which depends only on what's in Redis, never on this process directly.
+// Owns the Binance WebSocket connection and the 24hr-meta REST poller. Publishes
+// everything to Redis (redisPublisher.ts); serves no HTTP/WS traffic of its own.
 
 const redis = new Redis(config.redisUrl);
 const publisher = new RedisPublisher(redis);

@@ -23,29 +23,9 @@ interface ClientState {
 }
 
 /**
- * Runs the WebSocket server mobile clients connect to, and the broadcast
- * loop that pushes market state to them.
- *
- * Backpressure strategy (the assignment explicitly calls this out):
- * We never queue individual Binance ticks per client. Each tick, we sample
- * whatever the current state is in the market store and send that single
- * snapshot. This means:
- *   - No per-client queue exists that could grow unboundedly from a burst
- *     of upstream ticks — a slow client simply misses intermediate states
- *     and catches up to the latest one next tick. Coalescing is implicit.
- *   - The remaining risk is the client's own TCP socket buffer filling up
- *     because the network/device can't drain it fast enough. We guard that
- *     explicitly via `ws.bufferedAmount`: if a client is backlogged past
- *     MAX_CLIENT_BUFFERED_BYTES, we skip sending them this tick rather than
- *     letting `ws.send()` pile more data into an already-full buffer.
- *
- * Per-client format & cadence: each connection can send a `{ type:
- * "configure", intervalMs?, format? }` control message (JSON, always — the
- * control channel itself never switches to binary) to pick its own encoding
- * (JSON or msgpack) and broadcast cadence at runtime, without reconnecting.
- * There's still a single global setInterval at config.broadcastIntervalMs —
- * per-client cadence is achieved by gating sends within that tick rather
- * than by spinning up a timer per connection.
+ * WebSocket server for mobile clients, plus the broadcast loop that pushes market
+ * state to them. Backpressure and per-client format/cadence are handled here — see
+ * README's Key Decisions for the full rationale.
  */
 export class Broadcaster {
   private wss: WebSocketServer;
@@ -63,9 +43,7 @@ export class Broadcaster {
         lastSentAt: 0,
       });
 
-      // Send an immediate snapshot on connect so the client doesn't wait
-      // up to intervalMs for its first paint. Always JSON — the client
-      // hasn't had a chance to configure() yet.
+      // Immediate snapshot on connect (always JSON) so the client doesn't wait for the first tick.
       const sent = this.trySend(ws, JSON.stringify(this.buildSnapshotMessage()));
       if (sent) {
         const state = this.clientState.get(ws);
@@ -140,9 +118,7 @@ export class Broadcaster {
   private trySend(ws: WebSocket, payload: string | Uint8Array): boolean {
     if (ws.readyState !== WebSocket.OPEN) return false;
     if (ws.bufferedAmount > config.maxClientBufferedBytes) {
-      // Client can't keep up — skip this tick for them rather than growing
-      // their buffer further. They'll get a fresh (more current) snapshot
-      // on the next tick once they've drained.
+      // Client can't keep up — skip this tick rather than growing its buffer further.
       debugLog("ws", "backpressure skip, bufferedAmount:", ws.bufferedAmount);
       return false;
     }

@@ -1,11 +1,6 @@
 import { config } from "./config";
 
-/**
- * No-ops unless DEBUG is on (config.debug — see the :debug script aliases in
- * package.json). Scope is a short tag identifying where the log came from
- * (e.g. "binance", "redis", "broadcast"), matching the existing `[server]`/
- * `[binance]`/etc. bracket convention used by the always-on console.log calls.
- */
+/** No-ops unless DEBUG is on. `scope` is a short tag (e.g. "binance", "redis"). */
 export function debugLog(scope: string, ...args: unknown[]): void {
   if (!config.debug) return;
   console.log(`[debug:${scope}]`, ...args);
@@ -23,12 +18,7 @@ interface TickEntry {
 const tickEntries = new Map<string, TickEntry>();
 let flushTimer: NodeJS.Timeout | null = null;
 
-/**
- * Counts a high-frequency per-tick debug event (one per price update) instead of
- * logging it immediately — at market data rates (100 pairs, sub-second ticks),
- * one debugLog() call per tick floods the console. Flushed as a periodic summary
- * every TICK_SUMMARY_INTERVAL_MS by flushTickSummaries().
- */
+/** Counts a per-tick debug event instead of logging it immediately — avoids flooding the console at market data rates. Flushed as a periodic summary. */
 export function debugTick(scope: string, label: string, pair: string): void {
   if (!config.debug) return;
   const key = `${scope}/${label}`;

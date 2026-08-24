@@ -4,15 +4,8 @@ import { debugLog, debugTick } from "../logger";
 import { marketStore } from "../state/marketStore";
 import { BookLevel, PairState } from "../types";
 
-// We use Binance's partial book depth stream (top N levels, pushed on a
-// fixed cadence by Binance itself — see config.binanceDepthStreamSuffix)
-// rather than the raw diff-depth stream. Binance already maintains the
-// order book and hands us a ready-to-use snapshot per message. The
-// alternative — subscribing to @depth diffs and maintaining our own book
-// via a REST snapshot + sequenced diff application — is real engineering
-// surface (out-of-order handling, resync-on-gap, snapshot staleness) that
-// doesn't add meaningful signal for this exercise, so it's a deliberately
-// scoped trade-off. See README for more.
+// Uses Binance's partial book depth stream (ready-made top-N snapshot) rather than
+// raw diff-depth + manual book maintenance — see README's Key Decisions for why.
 
 interface CombinedStreamMessage {
   stream: string;
@@ -28,20 +21,13 @@ function buildStreamUrl(symbolsLower: string[]): string {
   return `${config.binanceWsBaseUrl}?streams=${streams}`;
 }
 
-/**
- * Maintains a single persistent connection to Binance's combined stream for
- * all tracked pairs (one socket, not one-per-pair, and not one-per-client).
- * Reconnects with exponential backoff on drop. All mobile clients share this
- * single upstream connection via the broadcaster/market store.
- */
+/** Single persistent connection to Binance's combined stream for all tracked pairs — reconnects with exponential backoff on drop. */
 export class BinanceIngestionClient {
   private ws: WebSocket | null = null;
   private reconnectAttempt = 0;
   private closedByUs = false;
 
-  // Fires after every marketStore mutation this client makes, with that pair's fresh
-  // state. Lets a caller (e.g. the ingestion process, republishing to Redis) react to
-  // changes without this class knowing anything about where they're republished to.
+  // Notifies the caller (e.g. ingestion, to republish to Redis) after each mutation.
   constructor(private onUpdate?: (pair: string, state: PairState) => void) {}
 
   private notify(pair: string) {

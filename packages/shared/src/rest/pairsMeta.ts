@@ -1,35 +1,21 @@
 import { config } from "../config";
+import { TICKER_24HR_PATH } from "../constants/binance";
 import { marketStore } from "../state/marketStore";
 import { PairMeta } from "../types";
 
 let latestMeta = new Map<string, PairMeta>();
-// Tracks the most recent fetch failure so it can be surfaced to callers
-// (logged, and exposed via getMetaFetchError() for the REST layer) instead
-// of being silently papered over with invented numbers.
+// Surfaced via getMetaFetchError() instead of being silently swallowed.
 let lastFetchError: string | null = null;
 
 /**
- * Polls Binance's 24hr ticker REST endpoint once, and feeds the result into
- * both the /pairs/meta cache and the live market store's change24h field.
- * One HTTP call serves both purposes rather than duplicating the request.
- *
- * Fallback behavior on failure (rate limiting, network issue, geo-blocking):
- * we deliberately do NOT fabricate mock numbers. Instead:
- *   - If a previous successful fetch exists, that cached real data keeps
- *     being served (stale-but-real beats fake-but-fresh) and change24h in
- *     the market store is simply left untouched.
- *   - If there has never been a successful fetch, getPairsMeta() returns
- *     each pair with null high/low/volume and tradingStatus "UNKNOWN" —
- *     an honest "we don't know yet" rather than invented figures — and
- *     change24h in the market store stays at its default (null).
- * The failure itself is always logged, and the most recent error message
- * is available via getMetaFetchError() for callers that want to surface it
- * (e.g. as a response header — see index.ts).
+ * Polls Binance's 24hr ticker once, feeding both the /pairs/meta cache and the
+ * market store's change24h. Never fabricates data on failure — see README's
+ * "No mock data" section for the fallback behavior.
  */
 export async function refreshPairsMeta(): Promise<void> {
   try {
     const symbolsParam = encodeURIComponent(JSON.stringify(config.pairsUpper));
-    const url = `${config.binanceRestBaseUrl}/api/v3/ticker/24hr?symbols=${symbolsParam}`;
+    const url = `${config.binanceRestBaseUrl}${TICKER_24HR_PATH}?symbols=${symbolsParam}`;
     const res = await fetch(url, { signal: AbortSignal.timeout(config.metaFetchTimeoutMs) });
     if (!res.ok) throw new Error(`Binance responded ${res.status}`);
     const data = (await res.json()) as any[];

@@ -13,17 +13,10 @@ import { RemoteMarketStore } from "@pulsecrypto/shared/state/remoteMarketStore";
 import { marketStore } from "@pulsecrypto/shared/state/marketStore";
 import { MarketReader } from "@pulsecrypto/shared/types";
 
-// This process always serves REST + WebSocket traffic to mobile clients. What it does
-// for market/meta *data* depends on config.appMode:
-//   - "distributed" (default): no Binance connection here — reads come from Redis,
-//     written by the separately-run ingestion process (packages/ingestion). See
-//     state/remoteMarketStore.ts and rest/remotePairsMeta.ts in packages/shared.
-//   - "standalone": runs BinanceIngestionClient + the meta poller in this same
-//     process, using the in-memory marketStore/pairsMeta modules directly — no Redis
-//     involved. This is a local-dev fallback for anyone without Docker/Redis handy;
-//     it's the same single-process shape this backend had before the Redis split.
-// Both branches end up handing Broadcaster the same MarketReader interface, so
-// nothing downstream of that needs to know which mode is active.
+// Always serves REST + WebSocket traffic. Market/meta data source depends on
+// config.appMode: "distributed" reads from Redis (ingestion runs separately);
+// "standalone" runs ingestion in-process, no Redis (local-dev fallback). Both
+// branches hand Broadcaster the same MarketReader, so it doesn't know which is active.
 
 const app = express();
 app.use(compression());
@@ -47,10 +40,7 @@ app.get("/pairs", (_req, res) => {
 });
 
 app.get("/pairs/meta", async (_req, res) => {
-  // Response body stays a plain PairMeta[] for backward compatibility with the
-  // mobile client. The most recent Binance fetch error (if any) is surfaced as a
-  // header rather than changing the body shape. Individual pairs already carry
-  // their own honesty signal via null fields and tradingStatus "UNKNOWN".
+  // Body stays a plain PairMeta[]; a fetch error (if any) is a header, not a body-shape change.
   const fetchError =
     config.appMode === "standalone" ? getMetaFetchError() : await getRemoteMetaFetchError(redis!);
   if (fetchError) res.set("X-Meta-Fetch-Error", fetchError);

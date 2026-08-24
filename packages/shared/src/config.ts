@@ -38,9 +38,7 @@ export const config = {
 
   // --- Binance ingestion (WebSocket) ---
   binanceWsBaseUrl: envString("BINANCE_WS_BASE_URL", "wss://stream.binance.com:9443/stream"),
-  // Partial book depth stream — see binance/client.ts for why this was chosen
-  // over the raw diff-depth stream. Configurable so a smaller/larger depth
-  // window or a different update cadence can be swapped without a code change.
+  // Partial book depth stream (see binance/client.ts); configurable window/cadence.
   binanceDepthStreamSuffix: envString("BINANCE_DEPTH_STREAM_SUFFIX", "depth20@100ms"),
   binanceReconnectBaseDelayMs: envInt("BINANCE_RECONNECT_BASE_DELAY_MS", 1000),
   binanceReconnectMaxDelayMs: envInt("BINANCE_RECONNECT_MAX_DELAY_MS", 30_000),
@@ -54,19 +52,12 @@ export const config = {
   redisUrl: envString("REDIS_URL", "redis://localhost:6379"),
 
   // --- Process topology ---
-  // "distributed" (default): index.ts is broadcast-only and reads market/meta state
-  // from Redis, published by a separately-run ingestion.ts — see docker-compose.yml.
-  // "standalone": index.ts also runs the Binance ingestion in-process, no Redis
-  // involved at all. Local-dev fallback for anyone without Docker/Redis available;
-  // not meant for production (no split, no horizontal scaling of broadcast). Set by
-  // .env.local (via the dev:broadcast:local script alias), not meant to be passed
-  // directly — see loadEnv.ts.
+  // "distributed" (default): broadcast reads from Redis, ingestion publishes to it.
+  // "standalone": broadcast also runs ingestion in-process, no Redis — local-dev
+  // fallback, set via .env.local (see loadEnv.ts). Not meant for production.
   appMode: envString("APP_MODE", "distributed") as "distributed" | "standalone",
 
   // --- Debugging ---
-  // Verbose, high-volume logging for troubleshooting (connection lifecycle, every
-  // Redis publish/subscribe, per-client configure/backpressure events, resolved
-  // config at startup). Off by default — see the :debug script aliases in
-  // package.json and src/logger.ts.
+  // Verbose troubleshooting logs, off by default — see logger.ts and the :debug scripts.
   debug: envBool("DEBUG", false),
 };

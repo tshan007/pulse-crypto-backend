@@ -1,10 +1,7 @@
-// A single price/quantity level in the order book, as strings straight from
-// Binance (we keep them as strings until the point of use to avoid float
-// precision surprises, and only parse when computing derived numbers).
+// Kept as strings (Binance's own format) until point of use, to avoid float precision surprises.
 export type BookLevel = [string, string]; // [price, quantity]
 
-// The live, continuously-updated state we hold in memory for one trading
-// pair. This is the single source of truth the broadcaster samples from.
+// Live, continuously-updated state for one trading pair — the source the broadcaster samples.
 export interface PairState {
   pair: string; // e.g. "BTCUSDT"
   timestamp: number; // ms epoch of the last update applied
@@ -18,19 +15,13 @@ export interface PairState {
   connected: boolean; // whether the upstream Binance stream for this pair is live
 }
 
-// Read-only view onto live market state. `MarketStore` (in-process) and the
-// Redis-backed `RemoteMarketStore` (broadcast process, once ingestion runs
-// separately) both satisfy this — it's what `Broadcaster` depends on instead
-// of a concrete store, so the backing implementation can change without
-// touching broadcast code.
+// Read-only view `Broadcaster` depends on; `MarketStore`/`RemoteMarketStore` both satisfy it.
 export interface MarketReader {
   getAll(): PairState[];
   getPair(pair: string): PairState | undefined;
 }
 
-// Metadata for a pair, served by GET /pairs/meta. Sourced from Binance's
-// 24hr ticker REST endpoint. Never fabricated — see rest/pairsMeta.ts for
-// what happens when that source is unavailable.
+// Served by GET /pairs/meta. Never fabricated — see rest/pairsMeta.ts for the fallback.
 export interface PairMeta {
   pair: string;
   tradingStatus: "TRADING" | "BREAK" | "UNKNOWN"; // UNKNOWN = no real data available yet
@@ -48,10 +39,7 @@ export type ServerMessage =
 
 export type WireFormat = "json" | "msgpack";
 
-// Inbound WebSocket control message. A client can send this at any point
-// after connecting to change its own broadcast cadence and/or encoding
-// without reconnecting. Always sent as JSON regardless of the negotiated
-// data format — this channel is low-frequency and stays simple to debug.
+// Inbound control message — lets a client change cadence/encoding without reconnecting.
 export type ClientMessage = {
   type: "configure";
   intervalMs?: number; // omit to leave interval unchanged

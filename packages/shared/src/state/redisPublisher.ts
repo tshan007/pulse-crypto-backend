@@ -1,30 +1,24 @@
 import Redis from "ioredis";
 import { debugLog, debugTick } from "../logger";
+import { MARKET_UPDATES_CHANNEL, PAIRS_META_CACHE_KEY, PAIRS_META_FETCH_ERROR_KEY, marketKey } from "../constants/redisKeys";
 import { PairMeta, PairState } from "../types";
 
-/**
- * Ingestion-side counterpart to `RemoteMarketStore`/`remotePairsMeta` (broadcast side).
- * Writes go two places per update:
- *   - a plain `SET` under a per-pair key ("mirror seed") so a broadcast process that
- *     starts up before any live tick arrives still has real data to hydrate from, and
- *   - a `PUBLISH` on a shared channel so already-running broadcast processes update
- *     immediately rather than waiting on the next poll.
- * Meta (24hr ticker) has no live-push need — it's already REST-polled at low frequency —
- * so it's just two SETs, read directly by the /pairs/meta route.
- */
+/** Ingestion-side counterpart to `RemoteMarketStore`/`remotePairsMeta` (broadcast side). */
 export class RedisPublisher {
   constructor(private redis: Redis) {}
 
   async publishMarketUpdate(pair: string, state: PairState): Promise<void> {
+    // SET is the mirror-seed a fresh broadcast process hydrates from; PUBLISH pushes
+    // the update to already-running ones immediately.
     const payload = JSON.stringify(state);
-    await this.redis.set(`market:${pair}`, payload);
-    await this.redis.publish("market:updates", JSON.stringify({ pair, state }));
+    await this.redis.set(marketKey(pair), payload);
+    await this.redis.publish(MARKET_UPDATES_CHANNEL, JSON.stringify({ pair, state }));
     debugTick("redis", "published", pair);
   }
 
   async publishMetaSnapshot(metas: PairMeta[], fetchError: string | null): Promise<void> {
-    await this.redis.set("pairsmeta:cache", JSON.stringify(metas));
-    await this.redis.set("pairsmeta:fetcherror", fetchError ?? "");
+    await this.redis.set(PAIRS_META_CACHE_KEY, JSON.stringify(metas));
+    await this.redis.set(PAIRS_META_FETCH_ERROR_KEY, fetchError ?? "");
     debugLog("redis", "published meta snapshot,", metas.length, "pairs, fetchError:", fetchError);
   }
 }

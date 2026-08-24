@@ -300,6 +300,10 @@ correctly skipping compression not worth the CPU, not a misconfiguration.
 - Per-client cadence is implemented by gating sends within the single existing base-tick
   `setInterval`, not by running a timer per connection — simpler and keeps resource usage
   bounded regardless of how many clients pick a slower interval than the base tick.
+- Binance REST calls (`rest/pairsMeta.ts`) build the URL and call `fetch` inline rather
+  than going through a dedicated API client — there's only one REST call site today, so a
+  client wrapper (shared base URL/timeout/error handling) has nothing to streamline yet.
+  Worth revisiting if a second Binance REST endpoint gets added.
 
 ## AI-assisted development
 

@@ -2,14 +2,8 @@ import { BookLevel, PairState } from "../types";
 import { config } from "../config";
 
 /**
- * Holds the current, continuously-mutated state for every tracked pair.
- *
- * Design note: this is *state*, not an event log. Binance depth messages
- * overwrite the relevant fields in place; nothing here is queued. That's
- * what makes the broadcaster's backpressure story simple — there is no
- * buffer of pending ticks that can grow unboundedly, because we never
- * accumulate ticks in the first place. Each broadcast tick just reads
- * whatever the latest state happens to be at that instant.
+ * Holds live per-pair state, mutated in place — not a queue. That's what keeps the
+ * broadcaster's backpressure story simple: nothing here can grow unboundedly.
  */
 class MarketStore {
   private pairs = new Map<string, PairState>();
