@@ -44,7 +44,5 @@ export type ClientMessage = {
   type: "configure";
   intervalMs?: number; // omit to leave interval unchanged
   format?: WireFormat; // omit to leave format unchanged
-  // "all" = every tracked pair (default); an array (possibly empty) = only those pairs.
-  // Omit to leave the current pair scope unchanged.
-  pairs?: "all" | string[];
+  pairs?: "all" | string[]; // "all" (default) or a specific set; omit to leave unchanged
 };

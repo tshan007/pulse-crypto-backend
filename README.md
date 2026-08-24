@@ -196,58 +196,40 @@ of declared `dependencies`, so nothing at the module-resolution level actually *
 `packages/broadcast` from importing `@pulsecrypto/ingestion` — the boundary is enforced by
 each package's `dependencies` and code review, not a hard resolution wall.
 
-### Key decisions
+## Architectural decisions
 
-**Partial book depth stream, not diff-depth + snapshot merge.** `<symbol>@depth20@100ms`
-gives a ready-made top-20 snapshot; the alternative is applying `@depth` diffs to a REST
-snapshot yourself, handling sequence numbers and gap resync. Chose the snapshot stream —
-simpler and more robust, at the cost of only seeing the top 20 levels. Fine for a market
-*viewer*, not an execution engine.
-
-**State, not a queue, is what gets broadcast.** Every Binance message overwrites fields in
-a `Map<pair, PairState>` in place; the broadcaster's interval timer just serializes
-whatever that map currently holds. This is the "buffer and/or batch, emit at a
-configurable interval" requirement in practice: a burst of 50 Binance messages in one
-100ms window collapses into exactly one outbound message, since they're all overwriting
-the same shared state.
-
-**Backpressure guard is about socket buffers, not app-level queues.** With no app-level
-queue, the only thing that can grow unboundedly is a slow client's outbound TCP socket
-buffer. Before each send, the broadcaster checks `ws.bufferedAmount`; a client backlogged
-past `MAX_CLIENT_BUFFERED_BYTES` (default 1MB) is skipped for that tick rather than queued
-further, and picks up with a fresher snapshot next tick.
-
-**Per-client format & cadence, via a control message, not a new endpoint.** A client sends
-`{"type":"configure","intervalMs":500,"format":"msgpack"}` over its open WebSocket to
-switch between JSON/msgpack and/or request a slower cadence, no reconnect needed.
-`intervalMs` is clamped to 5000ms max, and the effective interval is always
-`max(BROADCAST_INTERVAL_MS, clampedRequest)` — a client can only throttle down from the
-base tick, never faster. There's still one global `setInterval`; per-client cadence comes
-from gating within that tick (`now - lastSentAt >= effectiveIntervalMs`), not a timer per
-connection. Malformed control messages are logged and ignored, never close the connection.
-
-**One upstream connection, not one per client.** All mobile clients share a single Binance
-WebSocket connection via the shared market store — Binance connection count and rate
-limits are decoupled from mobile client count.
-
-**24hr change is polled, not streamed.** The depth stream doesn't carry 24h change, so
-`change24h` is refreshed via a periodic low-frequency REST poll and merged into the same
-`PairState`. Updates every ~10s instead of every 100ms — acceptable since 24h change moves
-slowly anyway.
-
-**No mock data — honest degradation on Binance REST failure instead.** If
-`/api/v3/ticker/24hr` fails, the backend never fabricates numbers:
-- Previous successful fetch exists → keep serving that cached real data (stale-but-real
-  beats fake-but-fresh); `change24h` stays untouched rather than overwritten.
-- Never fetched successfully → `GET /pairs/meta` returns `null` high/low/volume and
-  `tradingStatus: "UNKNOWN"` — an honest "don't know yet" instead of plausible fake data.
-- Every failure is logged, and the latest error is exposed via `X-Meta-Fetch-Error` on
-  `/pairs/meta`, so callers can detect degraded data without a response-shape change.
-
-Both paths have been exercised end-to-end: the never-fetched fallback (confirmed clean
-nulls/`UNKNOWN`, header carrying the real `403` Binance returned when outbound access was
-blocked), and the live path once outbound access was available — real Binance data flowing
-ingestion → Redis → broadcast → a connected WebSocket client.
+- Partial book depth stream (`depth20@100ms`), not diff-depth + manual book merge —
+  simpler, top-20 levels is enough for a viewer, not an execution engine.
+- Live state overwritten in place (`Map<pair, PairState>`), not a queue — bursts of
+  ticks collapse into one broadcast automatically.
+- Backpressure via `ws.bufferedAmount`, skip-tick for slow clients — no app-level
+  queue to grow unboundedly.
+- Per-client format/cadence via a `configure` WebSocket message, not a new endpoint —
+  one global tick, gated per client, clamped to 5000ms max.
+- Single shared upstream Binance connection — client count never multiplies Binance
+  connections/rate limits.
+- 24h change polled via REST (~10s) and merged into the same state — depth stream
+  doesn't carry it.
+- No mock data on Binance REST failure — serve last-known-real or explicit
+  `UNKNOWN`, error surfaced via `X-Meta-Fetch-Error`, never a fabricated number.
+- Ingestion and broadcast split, Redis is the only channel between them — no shared
+  memory.
+- npm-workspaces monorepo — `ingestion`/`broadcast` depend only on
+  `@pulsecrypto/shared`, never each other.
+- `MAX_CLIENT_INTERVAL_MS` is a protocol constant in code, not `.env` — it's a wire
+  contract with the mobile client, not deployment config.
+- `APP_ENV` unset defaults to `"development"` everywhere (npm scripts and Docker),
+  not plain `.env`.
+- High-frequency debug events are throttled into periodic summaries (`debugTick`),
+  not logged per-tick — avoids console flooding at 100 pairs.
+- Redis key/channel names centralized in `constants/redisKeys.ts` — one source of
+  truth for publisher and subscriber.
+- Docker: one default compose file + a debug overlay (`environment:` merges safely
+  across `-f` files) + a standalone scale file (`ports:` doesn't merge, so scaling
+  needs its own file) — `--scale` uses unpublished/random host ports to dodge a
+  Windows/Docker Desktop port-range race.
+- Mobile client's backend host/port/TLS are env-driven, with a platform-aware
+  default (`10.0.2.2` for Android emulator).
 
 ### Payload shape
 
@@ -274,50 +256,34 @@ ingestion → Redis → broadcast → a connected WebSocket client.
 `price` is the mid-price (best bid + best ask) / 2. `buyPressure`/`sellPressure` are the
 share of visible top-10-level volume on each side, summing to 100.
 
-## Assumptions
+## Assumptions made
 
-- 5 fixed pairs is sufficient (config-driven via `PAIRS` env var if more are wanted).
-- Top-10 order book levels (configurable via `DEPTH_LEVELS`) are enough for the mobile
-  detail view; the underlying Binance stream carries 20.
-- A market *viewer* doesn't need execution-grade order book accuracy, justifying the
-  partial-depth-stream trade-off above.
+- 100 pairs is the tested ceiling — no critical performance hit observed at that scale.
+- Top-10 depth levels (configurable) is enough for the mobile detail view; stream carries 20.
+- A market *viewer* doesn't need execution-grade order book accuracy.
+- Local dev happens on Docker Desktop (Windows/WSL2) — some tooling (e.g. dynamic
+  scale ports) works around its quirks rather than assuming Linux-only.
+- Mobile client owns its own reconnect/backoff — backend doesn't coordinate client retries.
 
-### Configuration
+## Trade-offs considered
 
-Every deployment-specific value lives in `.env` (see `.env.example`) — WS path, broadcast
-interval, backpressure threshold, tracked pairs, depth levels, Binance WS/REST base URLs,
-depth stream suffix, reconnect backoff, meta poll interval, fetch timeout, `REDIS_URL`
-(default `redis://localhost:6379`, `redis://redis:6379` inside Docker), and `APP_MODE`
-(`distributed` default, or `standalone` — see Run above). `packages/shared/src/config.ts`
-is the single place that reads `process.env`; nothing under `packages/*/src/` hardcodes a
-URL, port, or timing value. Both processes read the same `.env`/`config.ts` — only
-`REDIS_URL` typically needs to differ, and only when they're off the same Docker network.
-
-REST responses are gzip-compressed via Express's `compression()` middleware — transparent
-to any `fetch`-based client. Its ~1KB size threshold means `/pairs`/`/pairs/meta` may
-legitimately skip `Content-Encoding: gzip` at a small pair count; that's the middleware
-correctly skipping compression not worth the CPU, not a misconfiguration.
-
-## Trade-offs not taken further (given scope)
-
-- Ingestion and broadcast are split and Redis-backed (see Architecture above), but only
-  one instance of each runs, and there's no load balancer — not needed at current client
-  scale. The remaining HA work (Redis Sentinel, N broadcast instances behind a load
-  balancer, active/standby ingestion with leader election) is scoped but deliberately not
-  built; it's additive on top of what exists here, not a rework of it.
-- No historical price storage/candles — out of scope per the spec (current price + book only).
-- Per-client cadence is implemented by gating sends within the single existing base-tick
-  `setInterval`, not by running a timer per connection — simpler and keeps resource usage
-  bounded regardless of how many clients pick a slower interval than the base tick.
-- Binance REST calls (`rest/pairsMeta.ts`) build the URL and call `fetch` inline rather
-  than going through a dedicated API client — there's only one REST call site today, so a
-  client wrapper (shared base URL/timeout/error handling) has nothing to streamline yet.
-  Worth revisiting if a second Binance REST endpoint gets added.
+- No load balancer in front of scaled `broadcast` replicas — horizontal scaling
+  works, but isn't yet reachable behind one address.
+- No Redis Sentinel / ingestion leader-election / multi-instance HA — scoped, not
+  built, additive later.
+- No historical price storage/candles — out of scope per the spec.
+- Per-client cadence via one gated `setInterval`, not a timer per connection.
+- No dedicated Binance REST API client — one call site today, nothing to
+  streamline yet; revisit if a second endpoint gets added.
+- No per-instance identifier in logs — fine at one replica each; needed once
+  broadcast is actually scaled behind a load balancer.
 
 ## AI-assisted development
 
-Built collaboratively with Claude (Anthropic) — architectural discussion, code generation,
+Built the MVP collaboratively with Claude (Anthropic) — architectural discussion, code generation,
 and in-sandbox verification: dependency install, typecheck, a live end-to-end WebSocket
 smoke test (snapshot delivery at the configured interval, honest empty-value fallback when
-Binance is unreachable), and the discovery/fix of a real bug where `.env` was never
-actually being loaded (Node doesn't read `.env` files without an explicit loader).
+Binance is unreachable).
+And I steered follow-up iteration — revisit the architecture, reviewing behavior, flagging bugs and rough edges, and
+directing feature/refactor work — through to the current state.
+

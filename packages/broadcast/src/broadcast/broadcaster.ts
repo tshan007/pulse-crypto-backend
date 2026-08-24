@@ -20,17 +20,14 @@ interface ClientState {
   format: WireFormat;
   effectiveIntervalMs: number;
   lastSentAt: number;
-  // null = every tracked pair (default, and the common case — shares the one
-  // pre-serialized payload built per tick). A Set means this client only
-  // wants those pairs (e.g. a detail screen showing one pair, or an empty
-  // set for a screen that doesn't render pair data at all).
+  // null = every pair (shares the one pre-serialized payload); a Set = only those pairs.
   pairFilter: Set<string> | null;
 }
 
 /**
  * WebSocket server for mobile clients, plus the broadcast loop that pushes market
  * state to them. Backpressure and per-client format/cadence are handled here — see
- * README's Key Decisions for the full rationale.
+ * README's Architectural decisions for the full rationale.
  */
 export class Broadcaster {
   private wss: WebSocketServer;
@@ -161,8 +158,7 @@ export class Broadcaster {
 
         let payload: string | Uint8Array;
         if (state.pairFilter === null) {
-          // Common case: every client wants all pairs, so this payload is
-          // built once per tick and shared, not re-serialized per client.
+          // Shared payload, built once per tick — not re-serialized per client.
           payload = state.format === "msgpack" ? (msgpackPayload ??= encode(message)) : jsonPayload;
         } else {
           const filtered: ServerMessage = {

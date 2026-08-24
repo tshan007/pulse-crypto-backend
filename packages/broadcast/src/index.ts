@@ -13,10 +13,9 @@ import { RemoteMarketStore } from "@pulsecrypto/shared/state/remoteMarketStore";
 import { marketStore } from "@pulsecrypto/shared/state/marketStore";
 import { MarketReader } from "@pulsecrypto/shared/types";
 
-// Always serves REST + WebSocket traffic. Market/meta data source depends on
-// config.appMode: "distributed" reads from Redis (ingestion runs separately);
-// "standalone" runs ingestion in-process, no Redis (local-dev fallback). Both
-// branches hand Broadcaster the same MarketReader, so it doesn't know which is active.
+// Always serves REST + WebSocket traffic. config.appMode picks the data source:
+// "distributed" reads from Redis (ingestion runs separately); "standalone" runs
+// ingestion in-process (local-dev fallback). Both hand Broadcaster the same MarketReader.
 
 const app = express();
 app.use(compression());
@@ -26,6 +25,7 @@ let redis: Redis | undefined;
 let binanceClient: BinanceIngestionClient | undefined;
 let remoteStore: RemoteMarketStore | undefined;
 
+// Simple health check for load balancers, container orchestrators, etc.
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -35,16 +35,20 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Fetches available pairs from config.
 app.get("/pairs", (_req, res) => {
   res.json(config.pairsUpper);
 });
 
+// Fetches metadata for available pairs. (initial load and pull-to-refresh)
 app.get("/pairs/meta", async (_req, res) => {
   // Body stays a plain PairMeta[]; a fetch error (if any) is a header, not a body-shape change.
   const fetchError =
     config.appMode === "standalone" ? getMetaFetchError() : await getRemoteMetaFetchError(redis!);
   if (fetchError) res.set("X-Meta-Fetch-Error", fetchError);
-  res.json(config.appMode === "standalone" ? getPairsMeta() : await getRemotePairsMeta(redis!));
+  res.json(config.appMode === "standalone" ? getPairsMeta()//Fetch from local cache
+    : await getRemotePairsMeta(redis!)//Fetch from redis
+  );
 });
 
 let broadcaster: Broadcaster;
@@ -53,6 +57,8 @@ async function main() {
   debugLog("config", "resolved config:", config);
   let store: MarketReader;
 
+  // This segment was added under the assumption that other developers may not have Redis or Docker running locally
+  // The only tradeoff for the clean architecture.
   if (config.appMode === "standalone") {
     await refreshPairsMeta();
     setInterval(() => {

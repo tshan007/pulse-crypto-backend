@@ -5,7 +5,7 @@ import { marketStore } from "../state/marketStore";
 import { BookLevel, PairState } from "../types";
 
 // Uses Binance's partial book depth stream (ready-made top-N snapshot) rather than
-// raw diff-depth + manual book maintenance — see README's Key Decisions for why.
+// raw diff-depth + manual book maintenance.
 
 interface CombinedStreamMessage {
   stream: string;
@@ -28,7 +28,7 @@ export class BinanceIngestionClient {
   private closedByUs = false;
 
   // Notifies the caller (e.g. ingestion, to republish to Redis) after each mutation.
-  constructor(private onUpdate?: (pair: string, state: PairState) => void) {}
+  constructor(private onUpdate?: (pair: string, state: PairState) => void) { }
 
   private notify(pair: string) {
     if (!this.onUpdate) return;
