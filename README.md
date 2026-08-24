@@ -162,39 +162,7 @@ The meta poller (`packages/shared/src/rest/pairsMeta.ts`, run from
 Redis-cached `/pairs/meta` response and the live market state's `change24h` field — one
 HTTP call serves both purposes.
 
-### npm-workspaces monorepo
 
-```
-packages/
-  shared/      config, types, logger, loadEnv, BinanceIngestionClient, MarketStore,
-               RedisPublisher, RemoteMarketStore, pairsMeta/remotePairsMeta — everything
-               both sides need (broadcast's APP_MODE=standalone path uses these directly,
-               so they can't live in ingestion)
-  ingestion/   src/index.ts — orchestrates BinanceIngestionClient + the meta poller +
-               RedisPublisher, all from @pulsecrypto/shared
-  broadcast/   src/index.ts + src/broadcast/broadcaster.ts (the one file that stays here,
-               since only broadcast uses it)
-```
-
-`ingestion` and `broadcast` each depend on `@pulsecrypto/shared` and never on each other —
-a real package boundary, not just convention.
-
-Cross-package imports (`@pulsecrypto/shared/config`, ...) resolve differently in dev vs.
-prod, so `packages/ingestion` and `packages/broadcast` each carry two tsconfigs:
-- `tsconfig.json` (dev, typecheck) aliases straight to shared's `src/*.ts` — no separate
-  shared build/watch needed.
-- `tsconfig.build.json` (prod build) resolves against shared's compiled `dist/*.d.ts`
-  instead, so `npm run build:shared` has to run first (the root `build` script always
-  does).
-
-At runtime, `require("@pulsecrypto/shared/config")` resolves through the npm-workspaces
-symlink and shared's `package.json` `exports` map — no bundler or path-alias tooling
-needed.
-
-One limitation: npm workspaces symlinks every package into root `node_modules` regardless
-of declared `dependencies`, so nothing at the module-resolution level actually *prevents*
-`packages/broadcast` from importing `@pulsecrypto/ingestion` — the boundary is enforced by
-each package's `dependencies` and code review, not a hard resolution wall.
 
 ## Architectural decisions
 
